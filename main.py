@@ -36,70 +36,61 @@ def mint(private_key, proxy, wallet_index):
     cprint(f'\nWallet: [{wallet_index}] | {address}', "light_green")
     logger.info(f"[{wallet_index}]|{address}|Начинаю минтить {NFT_NAME}...")
 
-
-    #сheck_nft
-    if CHECK_NFT:
-        holograph_balance = holograph_contract.functions.balanceOf(address).call()
-        if holograph_balance > 0:
-            logger.warning(f"{NFT_NAME} уже есть на кошельке. Перехожу к следующему.")
-            return None
-    
+    if LOW_GAS:
+        max_fee_per_gas = w3.to_wei(0.005, "gwei")
+        max_priority_fee_per_gas = w3.to_wei(0.005, "gwei")
     else:
-        if LOW_GAS:
-            max_fee_per_gas = w3.to_wei(0.005, "gwei")
-            max_priority_fee_per_gas = w3.to_wei(0.005, "gwei")
-        else:
-            max_fee_per_gas = w3.to_wei(1.50000006, "gwei")
-            max_priority_fee_per_gas = w3.to_wei(1.5, "gwei")
+        max_fee_per_gas = w3.to_wei(1.50000006, "gwei")
+        max_priority_fee_per_gas = w3.to_wei(1.5, "gwei")
 
-        amount = random.randint(AMOUNT[0], AMOUNT[1])
-        fee = holograph_contract.functions.getHolographFeeWei(amount).call()
-        tx = holograph_contract.functions.purchase(amount).build_transaction({
-            "from": address,
-            "chainId": 7777777,
-            "nonce": w3.eth.get_transaction_count(address),
-            "value": fee,
-            "maxFeePerGas": int(max_fee_per_gas),
-            "maxPriorityFeePerGas": int(max_priority_fee_per_gas),
-        })
-        tx["gas"] = int(w3.eth.estimate_gas(tx) * 1.2)
+    amount = random.randint(AMOUNT[0], AMOUNT[1])
+    fee = holograph_contract.functions.getHolographFeeWei(1).call()
+    tx = holograph_contract.functions.purchase(1 * amount).build_transaction({
+        "from": address,
+        "chainId": 7777777,
+        "nonce": w3.eth.get_transaction_count(address),
+        "value": fee * amount,
+        "maxFeePerGas": int(max_fee_per_gas),
+        "maxPriorityFeePerGas": int(max_priority_fee_per_gas),
+    })
+    tx["gas"] = int(w3.eth.estimate_gas(tx) * 1.2)
 
-        signed_tx = w3.eth.account.sign_transaction(tx, private_key)
+    signed_tx = w3.eth.account.sign_transaction(tx, private_key)
 
-        try:
-            tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-            logger.info(f"[{wallet_index}]|{address}|Отправляю транзакцию https://explorer.zora.energy/tx/{w3.to_hex(tx_hash)}")
-            receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-            
-            if receipt["status"] == 1:
-                logger.success(f">>>[{wallet_index}] {address} {amount} {NFT_NAME} успешно заминтил", "green")
-                success_csv(wallet_index, address, amount)
-                return receipt
+    try:
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        logger.info(f"[{wallet_index}]|{address}|Отправляю транзакцию https://explorer.zora.energy/tx/{w3.to_hex(tx_hash)}")
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        
+        if receipt["status"] == 1:
+            logger.success(f">>>[{wallet_index}] {address} {amount} {NFT_NAME} успешно заминтил", "green")
+            success_csv(wallet_index, address, amount)
+            return receipt
 
-        except Exception as e:
-            error_message = f"Failed: {str(e)}"
-            if "not in the chain after 120 seconds" in str(e):
-                logger.warning(f">>>[{wallet_index}] ({address}) Транзакция не в сети спустя 120 секунд, пробую еще раз через 5 секунд...")
-                time.sleep(5)
-                try:
-                    tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-                    logger.info(f"[{wallet_index}]|{address}|Отправляю транзакцию https://explorer.zora.energy/tx/{w3.to_hex(tx_hash)}")
-                    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-                    
-                    if receipt["status"] == 1:
-                        logger.success(f">>>[{wallet_index}] {address} {amount} {NFT_NAME} успешно заминтил", "green")
-                        success_csv(wallet_index, address, amount)
-                        return receipt
-                    
-                except Exception as e:
-                    error_message = f"Failed: {str(e)}"
-                    logger.error(f">>>[{wallet_index}] ({address}) Произошла ошибка при минте {amount} {NFT_NAME}: {str(e)}")
-                    failed_csv(wallet_index, private_key, address, error_message)
-                    return None
-            else:
+    except Exception as e:
+        error_message = f"Failed: {str(e)}"
+        if "not in the chain after 120 seconds" in str(e):
+            logger.warning(f">>>[{wallet_index}] ({address}) Транзакция не в сети спустя 120 секунд, пробую еще раз через 5 секунд...")
+            time.sleep(5)
+            try:
+                tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+                logger.info(f"[{wallet_index}]|{address}|Отправляю транзакцию https://explorer.zora.energy/tx/{w3.to_hex(tx_hash)}")
+                receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+                
+                if receipt["status"] == 1:
+                    logger.success(f">>>[{wallet_index}] {address} {amount} {NFT_NAME} успешно заминтил", "green")
+                    success_csv(wallet_index, address, amount)
+                    return receipt
+                
+            except Exception as e:
+                error_message = f"Failed: {str(e)}"
                 logger.error(f">>>[{wallet_index}] ({address}) Произошла ошибка при минте {amount} {NFT_NAME}: {str(e)}")
                 failed_csv(wallet_index, private_key, address, error_message)
                 return None
+        else:
+            logger.error(f">>>[{wallet_index}] ({address}) Произошла ошибка при минте {amount} {NFT_NAME}: {str(e)}")
+            failed_csv(wallet_index, private_key, address, error_message)
+            return None
 
 
 def create_dir(directory):
@@ -146,7 +137,8 @@ belomor = r'''
 def main():
     cprint(belomor, "cyan")
     print('Holograph-Zora minter запущен...')
-    print(f'Shuffle: {SHUFFLE}\n')
+    print(f'Shuffle: {SHUFFLE}')
+    print(f'Low Gas: {LOW_GAS}')
     time.sleep(3)
 
     private_keys = read_private_keys()
@@ -154,21 +146,16 @@ def main():
     numbered_private_keys = list(enumerate(private_keys, start=1))
     original_private_keys = numbered_private_keys.copy()
     wallet_pair = dict(zip(private_keys, proxies))
-    for private_key in private_keys:
-        proxy = wallet_pair[private_key]
 
     if not private_keys:
         cprint("Отсутствуют приватные ключи. Завершаю работу.", "red")
         return
     
-    if len(proxies) != len(private_keys):
-        cprint("Количество приватных ключей не соответствует количеству прокси. Завершаю работу.", "red")
-        return
-
     if SHUFFLE:
         random.shuffle(numbered_private_keys)
 
     for _, private_key in numbered_private_keys:
+        proxy = wallet_pair[private_key]
         wallet_index = next(index for index, (_, key) in enumerate(original_private_keys, start=1) if key == private_key)
 
         try:
@@ -183,4 +170,7 @@ def main():
     print("\nHolograph-Zora minter завершен.\n")
 
 if __name__ == "__main__":
-    main()
+    if len(proxies) != len(private_keys):
+        cprint("Количество приватных ключей не соответствует количеству прокси. Завершаю работу.", "red")
+    else:
+        main()
