@@ -10,9 +10,6 @@ AMOUNT = [1, 1]
 #rpc
 ZORA_PRC = "https://rpc.zora.energy"
 
-#чекать есть ли нфт на кошельке. если есть то минтить не будет.
-CHECK_NFT = True
-
 #занижать ли газ
 LOW_GAS = True
 
